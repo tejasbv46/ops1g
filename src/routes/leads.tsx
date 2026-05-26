@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import type { LeadStage } from "@/lib/types";
 import { useMountedNow } from "@/hooks/use-now";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/leads")({
   head: () => ({
@@ -16,17 +17,29 @@ export const Route = createFileRoute("/leads")({
   component: LeadsPage,
 });
 
+const INTENT_FILTERS = ["all", "hot", "warm", "cold"] as const;
+type IntentFilter = typeof INTENT_FILTERS[number];
+
 function LeadsPage() {
   const { leads, tcms, selectLead } = useApp();
   const [, mounted] = useMountedNow();
   const [q, setQ] = useState("");
   const [stage, setStage] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"confidence" | "moveIn" | "updated">("confidence");
+  const [intentFilter, setIntentFilter] = useState<IntentFilter>("all");
+
+  const counts = useMemo(() => ({
+    all: leads.length,
+    hot: leads.filter((l) => l.intent === "hot").length,
+    warm: leads.filter((l) => l.intent === "warm").length,
+    cold: leads.filter((l) => l.intent === "cold").length,
+  }), [leads]);
 
   const filtered = useMemo(() => {
     const list = leads.filter((l) => {
       if (q && !l.name.toLowerCase().includes(q.toLowerCase()) && !l.phone.includes(q)) return false;
       if (stage !== "all" && l.stage !== stage) return false;
+      if (intentFilter !== "all" && l.intent !== intentFilter) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -35,7 +48,7 @@ function LeadsPage() {
       return +new Date(b.updatedAt) - +new Date(a.updatedAt);
     });
     return list;
-  }, [leads, q, stage, sortBy]);
+  }, [leads, q, stage, sortBy, intentFilter]);
 
   return (
     <AppShell>
@@ -66,6 +79,25 @@ function LeadsPage() {
             </Select>
           </div>
         </header>
+
+        {/* Priority Filter Buttons */}
+        <div className="flex items-center gap-2">
+          {INTENT_FILTERS.map((f) => (
+            <Button
+              key={f}
+              size="sm"
+              variant={intentFilter === f ? "default" : "outline"}
+              onClick={() => setIntentFilter(f)}
+              className={`capitalize h-8 ${
+                f === "hot" && intentFilter !== f ? "border-red-400 text-red-500 hover:bg-red-50" :
+                f === "warm" && intentFilter !== f ? "border-yellow-400 text-yellow-600 hover:bg-yellow-50" :
+                f === "cold" && intentFilter !== f ? "border-blue-400 text-blue-500 hover:bg-blue-50" : ""
+              }`}
+            >
+              {f === "all" ? `All (${counts.all})` : `${f} (${counts[f]})`}
+            </Button>
+          ))}
+        </div>
 
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="grid grid-cols-12 px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold border-b border-border bg-muted/40">
