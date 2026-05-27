@@ -26,16 +26,9 @@ function DashboardPage() {
 
   const filterTcm = role === "tcm" ? currentTcmId : undefined;
   const metrics = useMemo(() => computePropertyMetrics(properties, leads, tours), [properties, leads, tours]);
-  const queue = useMemo(
-    () => buildDoNextQueue(leads, tours, followUps, now, filterTcm),
-    [leads, tours, followUps, now, filterTcm],
-  );
-  const revivals = useMemo(
-    () => scanRevivals(leads, properties, tours, now),
-    [leads, properties, tours, now],
-  );
+  const queue = useMemo(() => buildDoNextQueue(leads, tours, followUps, now, filterTcm), [leads, tours, followUps, now, filterTcm]);
+  const revivals = useMemo(() => scanRevivals(leads, properties, tours, now), [leads, properties, tours, now]);
 
-  // Live, decayed view of every lead
   const liveLeads = useMemo(
     () => leads.map((l) => ({ ...l, confidence: liveConfidence(l, tours, now), intent: intentFor(liveConfidence(l, tours, now)) })),
     [leads, tours, now],
@@ -86,6 +79,31 @@ function DashboardPage() {
           <KpiCard label="MRR closed" value={`₹${(monthlyRevenue / 1000).toFixed(0)}k`} sub={`${bookings.length} booking${bookings.length === 1 ? "" : "s"}`} tone="success" />
         </div>
 
+        {/* Conversion Funnel */}
+        <section className="rounded-xl border border-border bg-card overflow-hidden">
+          <header className="flex items-center gap-2 px-4 py-3 border-b border-border">
+            <TrendingUp className="h-4 w-4 text-accent" />
+            <h2 className="font-display text-sm font-semibold">Conversion Funnel</h2>
+          </header>
+          <div className="p-4 flex items-end justify-around gap-4">
+            {[
+              { label: "Total Leads", value: liveLeads.length, color: "bg-blue-400" },
+              { label: "Tours Done", value: tours.filter((t) => t.status === "completed").length, color: "bg-yellow-400" },
+              { label: "Booked", value: booked, color: "bg-green-500" },
+            ].map((item, i) => {
+              const max = liveLeads.length || 1;
+              const height = Math.max(20, Math.round((item.value / max) * 120));
+              return (
+                <div key={i} className="flex flex-col items-center gap-2 flex-1">
+                  <span className="text-lg font-bold">{item.value}</span>
+                  <div className={`w-full rounded-t-md ${item.color}`} style={{ height: `${height}px` }} />
+                  <span className="text-xs text-muted-foreground text-center">{item.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {/* Today's queue (top 5 quick view) */}
         <section className="rounded-xl border border-border bg-card overflow-hidden">
           <header className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -118,7 +136,6 @@ function DashboardPage() {
           )}
         </section>
 
-        {/* Post-tour enforcement banner */}
         {incompleteTours.length > 0 && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5 animate-pulse" />
@@ -126,20 +143,15 @@ function DashboardPage() {
               <div className="font-semibold text-destructive text-sm">
                 {incompleteTours.length} post-tour update{incompleteTours.length > 1 ? "s" : ""} missing
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                Auto-escalation triggers at 6h. Click any name to fill the form now.
-              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">Auto-escalation triggers at 6h. Click any name to fill the form now.</div>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {incompleteTours.map((t) => {
                   const lead = leads.find((l) => l.id === t.leadId);
                   if (!lead) return null;
                   const hrs = Math.round((now - +new Date(t.scheduledAt)) / 36e5);
                   return (
-                    <button
-                      key={t.id}
-                      onClick={() => selectLead(lead.id)}
-                      className="text-[11px] rounded-md border border-destructive/30 bg-card px-2 py-0.5 hover:bg-destructive/10 transition-colors inline-flex items-center gap-1"
-                    >
+                    <button key={t.id} onClick={() => selectLead(lead.id)}
+                      className="text-[11px] rounded-md border border-destructive/30 bg-card px-2 py-0.5 hover:bg-destructive/10 transition-colors inline-flex items-center gap-1">
                       {lead.name} <span className="font-mono text-destructive min-w-[2ch] inline-block text-right">{mounted ? `${hrs}h` : '…'}</span>
                     </button>
                   );
@@ -150,7 +162,6 @@ function DashboardPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Hot pipeline */}
           <Card title="Hot pipeline" icon={Flame} accent action={<Link to="/leads" className="text-xs text-accent inline-flex items-center gap-1">All leads <ArrowUpRight className="h-3 w-3" /></Link>}>
             <div className="divide-y divide-border -mx-3">
               {hotLeads.slice(0, 5).map((l) => (
@@ -160,7 +171,6 @@ function DashboardPage() {
             </div>
           </Card>
 
-          {/* Today's tours */}
           <Card title="Today's tours" icon={CalendarPlus} action={<Link to="/tours" className="text-xs text-accent inline-flex items-center gap-1">All tours <ArrowUpRight className="h-3 w-3" /></Link>}>
             <div className="space-y-2">
               {todayTours.map((t) => {
@@ -169,11 +179,8 @@ function DashboardPage() {
                 if (!lead) return null;
                 const minsTo = (+new Date(t.scheduledAt) - now) / 60_000;
                 return (
-                  <button
-                    key={t.id}
-                    onClick={() => selectLead(lead.id)}
-                    className="w-full text-left rounded-lg border border-border bg-card hover:border-accent/40 transition-colors p-3"
-                  >
+                  <button key={t.id} onClick={() => selectLead(lead.id)}
+                    className="w-full text-left rounded-lg border border-border bg-card hover:border-accent/40 transition-colors p-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-sm">{lead.name}</span>
                       <span className={`text-xs font-mono ${mounted && minsTo < 60 && minsTo > 0 ? "text-accent" : "text-muted-foreground"}`}>
@@ -189,7 +196,6 @@ function DashboardPage() {
           </Card>
         </div>
 
-        {/* Revival opportunities */}
         {revivals.length > 0 && (
           <section className="rounded-xl border border-info/30 bg-info/5 overflow-hidden">
             <header className="flex items-center justify-between px-4 py-3 border-b border-info/20">
@@ -198,20 +204,15 @@ function DashboardPage() {
                 <h2 className="font-display text-sm font-semibold">Hidden revenue · revival queue</h2>
                 <span className="text-[10px] text-muted-foreground font-mono">{revivals.length} candidate{revivals.length === 1 ? "" : "s"}</span>
               </div>
-              <Link to="/revival" className="text-xs text-info inline-flex items-center gap-1">
-                Open queue <ArrowUpRight className="h-3 w-3" />
-              </Link>
+              <Link to="/revival" className="text-xs text-info inline-flex items-center gap-1">Open queue <ArrowUpRight className="h-3 w-3" /></Link>
             </header>
             <div className="divide-y divide-info/10">
               {revivals.slice(0, 4).map((r) => {
                 const lead = leads.find((l) => l.id === r.leadId);
                 if (!lead) return null;
                 return (
-                  <button
-                    key={r.leadId}
-                    onClick={() => selectLead(lead.id)}
-                    className="w-full text-left px-4 py-2 hover:bg-info/5 flex items-center justify-between gap-3"
-                  >
+                  <button key={r.leadId} onClick={() => selectLead(lead.id)}
+                    className="w-full text-left px-4 py-2 hover:bg-info/5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{lead.name}</div>
                       <div className="text-[11px] text-muted-foreground truncate">{r.reason}</div>
@@ -224,7 +225,6 @@ function DashboardPage() {
           </section>
         )}
 
-        {/* Inventory pressure */}
         <Card title="Inventory pressure" icon={Building2} action={<Link to="/inventory" className="text-xs text-accent inline-flex items-center gap-1">All properties <ArrowUpRight className="h-3 w-3" /></Link>}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {metrics.slice(0, 6).map((m) => (
@@ -257,11 +257,7 @@ function DashboardPage() {
   );
 }
 
-function Card({
-  title, icon: Icon, action, accent, children,
-}: {
-  title: string; icon: typeof Flame; action?: React.ReactNode; accent?: boolean; children: React.ReactNode;
-}) {
+function Card({ title, icon: Icon, action, accent, children }: { title: string; icon: typeof Flame; action?: React.ReactNode; accent?: boolean; children: React.ReactNode }) {
   return (
     <section className="rounded-xl border border-border bg-card overflow-hidden">
       <header className="flex items-center justify-between px-4 py-3 border-b border-border">
